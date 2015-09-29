@@ -1,6 +1,6 @@
 {
   "name": "inspiracode.crudFactory",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "authors": [
     "Alfredo Pacheco <apacheco@inspiracode.net>"
   ],
@@ -13,8 +13,7 @@
     "Angular"
   ],
   "license": "MIT",
-  "homepage": "",
-  "private": true,
+  "homepage": "https://github.com/inspiraCode/crudFactory",
   "ignore": [
     "**/.*",
     "node_modules",

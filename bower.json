@@ -1,0 +1,29 @@
+{
+  "name": "inspiracode.crudFactory",
+  "version": "1.0.0",
+  "authors": [
+    "Alfredo Pacheco <apacheco@inspiracode.net>"
+  ],
+  "description": "Custom AngularJS Factory to handle CRUD operations.",
+  "main": "inspiracode.crudFactory.js",
+  "moduleType": [],
+  "keywords": [
+    "CRUD",
+    "AngularJS",
+    "Angular"
+  ],
+  "license": "MIT",
+  "homepage": "",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "alertify-js": "~1.5.0",
+    "moment": "~2.10.6"
+  }
+}

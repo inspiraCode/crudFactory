@@ -5,7 +5,7 @@ angular.module('inspiracode.crudFactory', [])
 
 
 .constant('appConfig', {
-    //API_URL:'http://apps.capsonic.com/IQS_Backend/api/'   //PRODUCTION
+    //API_URL:'http://anotherURL'           //PRODUCTION
     API_URL: 'http://localhost:20695/api/' //DEVELOPMENT
 })
 
@@ -545,11 +545,10 @@ angular.module('inspiracode.crudFactory', [])
         };
 
         var _loadCatalogs = function(bForce) {
+            var deferred = $q.defer();
             if (bForce) _loadCatalogsExecuted = false;
             if (_loadCatalogsExecuted) {
-                return $q(function(resolve, reject) {
-                    resolve();
-                });
+                deferred.resolve();
             }
 
             var bAtLeastOneCatalog = false;
@@ -561,12 +560,12 @@ angular.module('inspiracode.crudFactory', [])
             }
 
             if (bAtLeastOneCatalog) {
-                return $http.get(appConfig.API_URL + _entityName + '/getCatalogs' + '?noCache=' + Number(new Date()))
+                $http.get(appConfig.API_URL + _entityName + '/getCatalogs' + '?noCache=' + Number(new Date()))
                     .success(function(data) {
                         var backendResponse = data;
                         if (backendResponse.ErrorThrown) {
                             console.debug(response);
-                            return $q.reject(data);
+                            deferred.reject(data);
                         } else {
                             for (var catalog in _catalogs) {
                                 if (_catalogs.hasOwnProperty(catalog)) {
@@ -574,20 +573,18 @@ angular.module('inspiracode.crudFactory', [])
                                 }
                             }
                             _loadCatalogsExecuted = true;
-                            return data;
+                            deferred.resolve(data);
                         }
                     })
                     .error(function(data) {
                         // something went wrong
                         console.debug(data);
-                        return $q.reject(data);
+                        deferred.reject(data);
                     });
             } else {
-
-
-
-                return $q.resolve();
+                deferred.resolve();
             }
+            return deferred.promise;
         };
 
         var _loadAll = function(bForce) {

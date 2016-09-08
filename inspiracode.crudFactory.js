@@ -5,7 +5,7 @@
  *              apacheco@capsonic.com
  *              j.alfredo.pacheco@gmail.com
  *              apacheco@inspiracode.net
- * Version:     1.1.0
+ * Version:     2.0.0
  * Name:        inspiracode.crudFactory
  * Description: AnguarJS module for handling CRUD operations, 
  *              caching, validation, and sync to server.
@@ -379,15 +379,35 @@ angular.module('inspiracode.crudFactory', [])
         var _adapter = oMainConfig.adapter;
         var _arrDependencies = angular.copy(oMainConfig.dependencies);
         var _arrDependenciesAndThis = angular.copy(oMainConfig.dependencies); //almost at the end of the file we add "This"
+        var _adapterOut = oMainConfig.adapterOut;
+        if (!_adapterOut) {
+            _adapterOut = function(oEntity, self) {
+                return oEntity;
+            };
+        }
         //END CONFIG//////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 
         var _arrAllRecords = [];
 
+
+        var _populateCatalogValues = function(entity) {
+            for (var catalog in _catalogs) {
+                if (_catalogs.hasOwnProperty(catalog)) {
+                    entity['' + catalog] = _catalogs[catalog].getById(entity['' + catalog + 'Key']);
+                }
+            }
+            return entity;
+        };
+
+        var _adapt = function(entity) {
+            return _populateCatalogValues(_adapter(entity, _self));
+        }
+
         var _getById = function(theId) {
             for (var i = 0; i < _arrAllRecords.length; i++) {
                 if (theId == _arrAllRecords[i].id) {
-                    return _adapter(_arrAllRecords[i], _self);
+                    return _populateCatalogValues(_adapter(_arrAllRecords[i], _self));
                 }
             }
             return null;
@@ -397,7 +417,7 @@ angular.module('inspiracode.crudFactory', [])
             var result = [];
             for (var i = 0; i < _arrAllRecords.length; i++) {
                 if (theParentId == _arrAllRecords[i][mainEntity.parentField]) {
-                    result.push(_adapter(_arrAllRecords[i], _self));
+                    result.push(_populateCatalogValues(_adapter(_arrAllRecords[i], _self)));
                 }
             }
             return result;
@@ -406,7 +426,7 @@ angular.module('inspiracode.crudFactory', [])
         var _getSingleByParentId = function(theParentId) {
             for (var i = 0; i < _arrAllRecords.length; i++) {
                 if (theParentId == _arrAllRecords[i][mainEntity.parentField]) {
-                    return _adapter(_arrAllRecords[i], _self);
+                    return _populateCatalogValues(_adapter(_arrAllRecords[i], _self));
                 }
             }
             return null;
@@ -415,7 +435,7 @@ angular.module('inspiracode.crudFactory', [])
         var _getRecursiveBySeedId = function(theSeedId) {
             for (var i = 0; i < _arrAllRecords.length; i++) {
                 if (theSeedId == _arrAllRecords[i][mainEntity.seedField]) {
-                    return _adapter(_arrAllRecords[i], _self);
+                    return _populateCatalogValues(_adapter(_arrAllRecords[i], _self));
                 }
             }
             return null;
@@ -423,7 +443,7 @@ angular.module('inspiracode.crudFactory', [])
 
         var _getAll = function() {
             for (var i = 0; i < _arrAllRecords.length; i++) {
-                _arrAllRecords[i] = _adapter(_arrAllRecords[i], _self);
+                _arrAllRecords[i] = _populateCatalogValues(_adapter(_arrAllRecords[i], _self));
             }
             return _arrAllRecords;
         };
@@ -435,17 +455,16 @@ angular.module('inspiracode.crudFactory', [])
             }
 
             if (mainEntity.validate(theEntity)) {
+                _adapterOut(theEntity, _self);
 
                 // New Entity
                 if (theEntity.id < 1) {
-
-
-                    $http.post(appConfig.API_URL + mainEntity.entityName + theParameters, "=" + escape(JSON.stringify(theEntity)))
+                    $http.post(appConfig.API_URL + mainEntity.entityName + theParameters, '=' + escape(JSON.stringify(theEntity)))
                         .then(function(response) {
                             if (typeof response.data === 'object') {
                                 var backendResponse = response.data;
                                 if (!backendResponse.ErrorThrown) {
-                                    _adapter(backendResponse.Result, _self);
+                                    _populateCatalogValues(_adapter(backendResponse.Result, _self));
                                     angular.copy(backendResponse.Result, theEntity);
                                     if (angular.isArray(theArrayBelonging)) {
                                         var theEntityCopy = angular.copy(theEntity);
@@ -459,7 +478,8 @@ angular.module('inspiracode.crudFactory', [])
                                     }, 100);
                                     deferred.resolve(response.data);
                                 } else {
-                                    alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                                    var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                                    alertify.alert(alertifyContent).set('modal', true);
                                     log.debug(response);
                                     deferred.reject(response.data);
                                 }
@@ -485,6 +505,7 @@ angular.module('inspiracode.crudFactory', [])
                                 if (!backendResponse.ErrorThrown) {
                                     theEntity.editMode = false;
                                     var current = _getById(theEntity.id);
+                                    _populateCatalogValues(_adapter(theEntity, _self));
                                     if (!angular.equals(theEntity, current)) {
                                         angular.copy(theEntity, current);
                                     }
@@ -493,7 +514,8 @@ angular.module('inspiracode.crudFactory', [])
                                     }, 100);
                                     deferred.resolve(response.data);
                                 } else {
-                                    alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                                    var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                                    alertify.alert(alertifyContent).set('modal', true);
                                     log.debug(response);
                                     deferred.reject(response.data);
                                 }
@@ -537,8 +559,13 @@ angular.module('inspiracode.crudFactory', [])
             }
             return $q.all(promises);
         };
-        var _remove = function(theEntity, theArrayBelonging) {
-            return $http.delete(appConfig.API_URL + mainEntity.entityName + '/' + theEntity.id)
+        var _remove = function(theEntity, theArrayBelonging, theParameters) {
+            var deferred = $q.defer();
+            if (theParameters === undefined || theParameters == null) {
+                theParameters = '';
+            }
+
+            $http.delete(appConfig.API_URL + mainEntity.entityName + '/' + theEntity.id + theParameters)
                 .then(function(response) {
                     if (typeof response.data === 'object') {
                         var backendResponse = response.data;
@@ -560,27 +587,30 @@ angular.module('inspiracode.crudFactory', [])
                             $timeout(function() {
                                 alertify.success(backendResponse.ResponseDescription);
                             }, 100);
-                            return response.data;
+                            deferred.resolve(response.data);
                         } else {
-                            alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
                             log.debug(response);
-                            return $q.reject(response.data);
+                            deferred.reject(response.data);
                         }
                     } else {
                         // invalid response
                         alertify.alert('An error has occurred, see console for more details.').set('modal', true);
                         log.debug(response);
-                        return $q.reject(response.data);
+                        deferred.reject(response.data);
                     }
                 }, function(response) {
                     // something went wrong
                     alertify.alert('Error: ' + response.statusText).set('modal', true);
                     log.debug(response);
-                    return $q.reject(response.data);
+                    deferred.reject(response.data);
                 });
+
+            return deferred.promise;
         };
 
-        var _removeSelected = function(arrEntities) {
+        var _removeSelected = function(arrEntities, theParameters) {
             var arrItems;
             if (arrEntities) {
                 arrItems = arrEntities;
@@ -599,7 +629,7 @@ angular.module('inspiracode.crudFactory', [])
 
             for (var j = 0; j < arrItemsToRemove.length; j++) {
                 var oEntity = arrItemsToRemove[j];
-                var promise = _remove(oEntity, arrEntities);
+                var promise = _remove(oEntity, arrEntities, theParameters);
                 promises.push(promise);
             };
 
@@ -611,27 +641,35 @@ angular.module('inspiracode.crudFactory', [])
             if (qParams === undefined || qParams == null) {
                 qParams = '?';
             }
-            $http.get(appConfig.API_URL + mainEntity.entityName + '/' + id + qParams + '&noCache=' + Number(new Date()))
-                .success(function(data) {
-                    var backendResponse = data;
-                    if (backendResponse.ErrorThrown) {
-                        deferred.reject(data);
-                    } else {
-                        mainEntity.adapterIn(backendResponse.Result);
-                        var oEntity = _getById(backendResponse.Result.id);
-                        if (oEntity) { //Already exists, lets updated it.
-                            angular.copy(backendResponse.Result, oEntity);
-                        } else { //First time loaded, lets add it.
-                            _arrAllRecords.push(backendResponse.Result);
+            if (id > 0) {
+                $http.get(appConfig.API_URL + mainEntity.entityName + '/' + id + qParams + '&noCache=' + Number(new Date()))
+                    .success(function(data) {
+                        var backendResponse = data;
+                        if (backendResponse.ErrorThrown) {
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
+                            log.debug(data);
+                            deferred.reject(data);
+                        } else {
+                            mainEntity.adapterIn(backendResponse.Result);
+                            var oEntity = _getById(backendResponse.Result.id);
+                            if (oEntity) { //Already exists, lets updated it.
+                                angular.copy(backendResponse.Result, oEntity);
+                            } else { //First time loaded, lets add it.
+                                _arrAllRecords.push(backendResponse.Result);
+                            }
+                            deferred.resolve(backendResponse.Result);
                         }
-                        deferred.resolve(backendResponse.Result);
-                    }
-                })
-                .error(function(data) {
-                    // something went wrong
-                    alertify.alert(data).set('modal', true);
-                    deferred.reject(backendResponse.Result);
-                });
+                    })
+                    .error(function(data) {
+                        // something went wrong
+                        alertify.alert(data).set('modal', true);
+                        log.debug(data);
+                        deferred.reject(backendResponse.Result);
+                    });
+            } else {
+                deferred.reject();
+            }
             return deferred.promise;
         };
 
@@ -646,35 +684,35 @@ angular.module('inspiracode.crudFactory', [])
             if (bForce) _loadEntitiesExecuted = false;
             if (_loadEntitiesExecuted) {
                 deferred.resolve(_arrAllRecords);
+            } else {
+                _arrAllRecords = [];
 
+                $http.get(appConfig.API_URL + mainEntity.entityName + '?noCache=' + Number(new Date()))
+                    .success(function(data) {
+                        var backendResponse = data;
+                        if (backendResponse.ErrorThrown) {
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
+                            log.debug(data);
+                            deferred.reject(data);
+                        } else {
+                            _arrAllRecords = backendResponse.Result;
+                            for (var i = 0; i < _arrAllRecords.length; i++) {
+                                mainEntity.adapterIn(_arrAllRecords[i]);
+                            };
+                            _loadEntitiesExecuted = true;
+                            deferred.resolve(data);
 
-
-            }
-            _arrAllRecords = [];
-
-            $http.get(appConfig.API_URL + mainEntity.entityName + '?noCache=' + Number(new Date()))
-                .success(function(data) {
-                    var backendResponse = data;
-                    if (backendResponse.ErrorThrown) {
+                        }
+                    })
+                    .error(function(data) {
+                        // something went wrong
+                        alertify.alert('An error has occurried, see console for more details.').set('modal', true);
                         log.debug(data);
                         deferred.reject(data);
 
-                    } else {
-                        _arrAllRecords = backendResponse.Result;
-                        for (var i = 0; i < _arrAllRecords.length; i++) {
-                            mainEntity.adapterIn(_arrAllRecords[i]);
-                        };
-                        _loadEntitiesExecuted = true;
-                        deferred.resolve(data);
-
-                    }
-                })
-                .error(function(data) {
-                    // something went wrong
-                    log.debug(data);
-                    deferred.reject(data);
-
-                });
+                    });
+            }
 
             return deferred.promise;
         };
@@ -684,40 +722,43 @@ angular.module('inspiracode.crudFactory', [])
             if (bForce) _loadCatalogsExecuted = false;
             if (_loadCatalogsExecuted) {
                 deferred.resolve();
-            }
-
-            var bAtLeastOneCatalog = false;
-            for (var catalog in _catalogs) {
-                if (_catalogs.hasOwnProperty(catalog)) {
-                    bAtLeastOneCatalog = true;
-                    _catalogs[catalog]._arrAllRecords = [];
-                }
-            }
-
-            if (bAtLeastOneCatalog) {
-                $http.get(appConfig.API_URL + mainEntity.entityName + '/getCatalogs' + '?noCache=' + Number(new Date()))
-                    .success(function(data) {
-                        var backendResponse = data;
-                        if (backendResponse.ErrorThrown) {
-                            log.debug(response);
-                            deferred.reject(data);
-                        } else {
-                            for (var catalog in _catalogs) {
-                                if (_catalogs.hasOwnProperty(catalog)) {
-                                    _catalogs[catalog]._arrAllRecords = backendResponse.Result[catalog];
-                                }
-                            }
-                            _loadCatalogsExecuted = true;
-                            deferred.resolve(data);
-                        }
-                    })
-                    .error(function(data) {
-                        // something went wrong
-                        log.debug(data);
-                        deferred.reject(data);
-                    });
             } else {
-                deferred.resolve();
+                var bAtLeastOneCatalog = false;
+                for (var catalog in _catalogs) {
+                    if (_catalogs.hasOwnProperty(catalog)) {
+                        bAtLeastOneCatalog = true;
+                        _catalogs[catalog]._arrAllRecords = [];
+                    }
+                }
+
+                if (bAtLeastOneCatalog) {
+                    $http.get(appConfig.API_URL + mainEntity.entityName + '/getCatalogs' + '?noCache=' + Number(new Date()))
+                        .success(function(data) {
+                            var backendResponse = data;
+                            if (backendResponse.ErrorThrown) {
+                                var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                                alertify.alert(alertifyContent).set('modal', true);
+                                log.debug(response);
+                                deferred.reject(data);
+                            } else {
+                                for (var catalog in _catalogs) {
+                                    if (_catalogs.hasOwnProperty(catalog)) {
+                                        _catalogs[catalog]._arrAllRecords = backendResponse.Result[catalog];
+                                    }
+                                }
+                                _loadCatalogsExecuted = true;
+                                deferred.resolve(data);
+                            }
+                        })
+                        .error(function(data) {
+                            // something went wrong
+                            alertify.alert('An error has occurried, see console for more details.').set('modal', true);
+                            log.debug(data);
+                            deferred.reject(data);
+                        });
+                } else {
+                    deferred.resolve();
+                }
             }
             return deferred.promise;
         };
@@ -758,7 +799,8 @@ angular.module('inspiracode.crudFactory', [])
                     function(response) {
                         var backendResponse = response.data;
                         if (backendResponse.ErrorThrown) {
-                            alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
                             deferred.reject(response);
                         } else {
                             for (var i = 0; i < backendResponse.Result.length; i++) {
@@ -781,16 +823,25 @@ angular.module('inspiracode.crudFactory', [])
         var _readSingleByParentId = function(parentKey) {
             var deferred = $q.defer();
 
-            $http.get(appConfig.API_URL + mainEntity.entityName + '?parentKey=' + parentKey + '&noCache=' + Number(new Date()))
+            $http.get(appConfig.API_URL + mainEntity.entityName + '/0?parentKey=' + parentKey + '&noCache=' + Number(new Date()))
                 .then(
                     /*success*/
                     function(response) {
                         var backendResponse = response.data;
                         if (backendResponse.ErrorThrown) {
-                            alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
                             deferred.reject(response);
                         } else {
-                            mainEntity.adapterIn(backendResponse.Result);
+                            if (backendResponse.Result != null) {
+                                mainEntity.adapterIn(backendResponse.Result);
+                                var oEntity = _getById(backendResponse.Result.id);
+                                if (oEntity) { //Already exists, lets updated it.
+                                    angular.copy(backendResponse.Result, oEntity);
+                                } else { //First time loaded, lets add it.
+                                    _arrAllRecords.push(backendResponse.Result);
+                                }
+                            }
                             deferred.resolve(backendResponse.Result);
                         }
                     },
@@ -807,34 +858,26 @@ angular.module('inspiracode.crudFactory', [])
         var _customPost = function(sCustomMethod, oData) {
             var deferred = $q.defer();
 
-            $http.post(appConfig.API_URL + mainEntity.entityName + '/' + sCustomMethod, "=" + escape(JSON.stringify(oData)))
+            $http.post(appConfig.API_URL + mainEntity.entityName + '/' + sCustomMethod, '=' + escape(JSON.stringify(oData)))
                 .then(function(response) {
                     if (typeof response.data === 'object') {
                         var backendResponse = response.data;
                         if (backendResponse.ErrorThrown) {
-                            alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                            alertify.error(backendResponse.ResponseDescription);
                             log.debug(response);
                             deferred.reject(backendResponse);
                         } else {
-                            if (angular.isArray(backendResponse.Result)) {
-                                for (var i = 0; i < backendResponse.Result.length; i++) {
-                                    mainEntity.adapterIn(backendResponse.Result[i]);
-                                }
-                            } else {
-                                mainEntity.adapterIn(backendResponse.Result);
-                            }
-
                             deferred.resolve(backendResponse.Result);
                         }
                     } else {
                         // invalid response
-                        alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                        alertify.error('An error has occurred, see console for more details.');
                         log.debug(response);
                         deferred.reject(response);
                     }
                 }, function(response) {
                     // something went wrong
-                    alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                    alertify.error('An error has occurred, see console for more details.');
                     log.debug(response);
                     deferred.reject(response);
 
@@ -851,7 +894,8 @@ angular.module('inspiracode.crudFactory', [])
                     if (typeof response.data === 'object') {
                         var backendResponse = response.data;
                         if (backendResponse.ErrorThrown) {
-                            alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
                             log.debug(response);
                             deferred.reject(backendResponse);
                         } else {
@@ -887,7 +931,8 @@ angular.module('inspiracode.crudFactory', [])
                     if (typeof response.data === 'object') {
                         var backendResponse = response.data;
                         if (backendResponse.ErrorThrown) {
-                            alertify.alert(backendResponse.ResponseDescription).set('modal', true);
+                            var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                            alertify.alert(alertifyContent).set('modal', true);
                             log.debug(response);
                             deferred.reject(response);
                         } else {
@@ -935,9 +980,118 @@ angular.module('inspiracode.crudFactory', [])
             // return true;
         };
 
+        var _finalize = function(theEntity) {
+            var deferred = $q.defer();
+
+            $http.post(appConfig.API_URL + mainEntity.entityName + '/finalize?entity_id=' + theEntity.id)
+                .then(function(response) {
+                    if (typeof response.data === 'object') {
+                        var backendResponse = response.data;
+                        if (backendResponse.ErrorThrown) {
+                            log.debug(backendResponse);
+                            deferred.reject(backendResponse);
+                        } else {
+                            theEntity.Entity_Status = 'FINALIZED';
+                            theEntity.Date_EditedOn = new Date();
+                            theEntity.isEntityFinalized = true;
+
+                            var originalEntity = _getById(theEntity.id);
+                            if (originalEntity) {
+                                originalEntity.Entity_Status = 'FINALIZED';
+                                originalEntity.Date_EditedOn = new Date();
+                                originalEntity.isEntityFinalized = true;
+                            }
+                            $timeout(function() {
+                                alertify.success(backendResponse.ResponseDescription);
+                            });
+                            deferred.resolve(backendResponse.Result);
+                        }
+                    } else {
+                        // invalid response
+                        alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                        log.debug(response);
+                        deferred.reject(response);
+                    }
+                }, function(response) {
+                    // something went wrong
+                    alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                    log.debug(response);
+                    deferred.reject(response);
+                });
+            return deferred.promise;
+        };
+
+        var _createEntity = function() {
+            var deferred = $q.defer();
+
+            $http.post(appConfig.API_URL + mainEntity.entityName + '/Create')
+                .then(function(response) {
+                    if (typeof response.data === 'object') {
+                        var backendResponse = response.data;
+                        if (backendResponse.ErrorThrown) {
+                            log.debug(backendResponse);
+                            deferred.reject(backendResponse);
+                        } else {
+                            backendResponse.Result.EF_State = 1; //Adding
+                            deferred.resolve(backendResponse.Result);
+                        }
+                    } else {
+                        // invalid response
+                        alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                        log.debug(response);
+                        deferred.reject(response);
+                    }
+                }, function(response) {
+                    // something went wrong
+                    alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                    log.debug(response);
+                    deferred.reject(response);
+                });
+            return deferred.promise;
+        };
+
+        var _addToParent = function(parentType, parentId, theEntity, theArrayBelonging) {
+            var deferred = $q.defer();
+
+            if (mainEntity.validate(theEntity)) {
+
+                $http.post(appConfig.API_URL + mainEntity.entityName + '/AddToParent/' + parentType + '/' + parentId, '=' + escape(JSON.stringify(theEntity)))
+                    .then(function(response) {
+                        if (typeof response.data === 'object') {
+                            var backendResponse = response.data;
+                            if (!backendResponse.ErrorThrown) {
+                                deferred.resolve(backendResponse.Result);
+                            } else {
+                                var alertifyContent = '<div style="word-wrap: break-word;">' + backendResponse.ResponseDescription + '</div>';
+                                alertify.alert(alertifyContent).set('modal', true);
+                                log.debug(response);
+                                deferred.reject(response.data);
+                            }
+                        } else {
+                            // invalid response
+                            alertify.alert('An error has occurred, see console for more details.').set('modal', true);
+                            log.debug(response);
+                            deferred.reject(response.data);
+                        }
+                    }, function(response) {
+                        // something went wrong
+                        alertify.alert('Error: ' + response.statusText).set('modal', true);
+                        log.debug(response);
+                        deferred.reject(response.data);
+                    });
+            } else {
+                deferred.reject();
+            }
+            return deferred.promise;
+        };
+
         var _getRawAll = function() {
             return _arrAllRecords;
-        }
+        };
+
+        var _setRawAll = function(arr) {
+            _arrAllRecords = arr;
+        };
 
         // Public crudFactory API:////////////////////////////////////////////////////////////
         var oAPI = {
@@ -954,8 +1108,10 @@ angular.module('inspiracode.crudFactory', [])
             getSingleByParentId: _getSingleByParentId, //Gets single Entity by ParentID from local array.
             getRecursiveBySeedId: _getRecursiveBySeedId, //Function for recursive lists, gets a single entity with all recursive children by SeedID
             getAll: _getAll, //Returns all Entities from local array.
-            getRawAll: _getRawAll, //TODO find a better solution.
+            getRawAll: _getRawAll, //TODO find a better solution, coz' we are manipulating a private variable.
+            setRawAll: _setRawAll, //TODO find a better solution, coz' we are manipulating a private variable.
             catalogs: _catalogs, //Stores catalogs defined on configuration.
+            adapt: _adapt, //adapt entity using _adapt and _populateCatalogs
 
             //Server transactions:
             loadDependencies: _loadDependencies, //Pull dependencies defined on configuration.
@@ -970,10 +1126,14 @@ angular.module('inspiracode.crudFactory', [])
             remove: _remove, //Removes a single Entity.
             removeSelected: _removeSelected, //Removes a batch of Entities. (to be depricated)
             removeBatch: _removeBatch, //Removes a batch of Entities.
-            customPost: _customPost, //Request a custom name method via Post.
             customGet: _customGet, //Request a custom name method via Post.            
-            take: _take //Set a user responsible for an Entity.
+            take: _take, //Set a user responsible for an Entity.
+            finalize: _finalize, //Entity is validated with bFinalize=true paramter, then status is changed to Completed, and entity is locked out.
 
+            //After Implementation with Generic Repository and Entity Framework:
+            customPost: _customPost, //Request a custom name method via Post.
+            createEntity: _createEntity, //Gets a new instance of entity from the backend.
+            addToParent: _addToParent //Saves an entity and attaches to parent specified.
         };
         _arrDependenciesAndThis.push(oAPI);
         var _self = oAPI;
